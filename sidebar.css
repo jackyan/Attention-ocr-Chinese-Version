@@ -54,22 +54,24 @@ body, html {
 
 /* Styles for the sidebar *when injected by content_script.js* into the GitHub page */
 /* These are applied to the *host* element created by content_script.js */
+/*
 #deepwiki-sidebar-host {
   position: fixed;
   top: 0;
   right: 0;
-  width: 33%; /* Target width: 1/3 of the viewport */
-  height: 100vh; /* Full viewport height */
-  z-index: 9999; /* High z-index to appear above GitHub content */
-  border: none; /* The iframe inside will have its own border if sidebar.css defines one for its container */
-  box-shadow: -2px 0 5px rgba(0,0,0,0.1); /* Optional: adds a subtle shadow */
+  width: 33%; / Target width: 1/3 of the viewport /
+  height: 100vh; / Full viewport height /
+  z-index: 9999; / High z-index to appear above GitHub content /
+  border: none; / The iframe inside will have its own border if sidebar.css defines one for its container /
+  box-shadow: -2px 0 5px rgba(0,0,0,0.1); / Optional: adds a subtle shadow /
   transition: transform 0.3s ease-in-out;
-  transform: translateX(100%); /* Initially off-screen */
+  transform: translateX(100%); / Initially off-screen /
 }
 
 #deepwiki-sidebar-host.visible {
-  transform: translateX(0%); /* Slide in when visible */
+  transform: translateX(0%); / Slide in when visible /
 }
+*/
 
 /* Adjust GitHub page content if necessary (optional, can be complex) */
 /* This example assumes GitHub's main content area can be identified and adjusted.

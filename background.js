@@ -1,10 +1,61 @@
 // background.js
 
+async function sendMessageToTabWithRetry(
+  tabId,
+  message,
+  retries = 3,
+  initialDelay = 200
+) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      // sendMessage itself doesn't always throw for "no receiving end" in a way
+      // that stops the promise chain immediately for all callers, but if it does, we catch.
+      // The main indicator is the console error "Uncaught (in promise)..."
+      // We'll assume if it doesn't throw an error here, it might have "succeeded" (message sent, but maybe not received).
+      // A robust solution would involve the content script sending an ack, but retry is a common first step.
+      await chrome.tabs.sendMessage(tabId, message);
+      // If the above line does not throw, we assume the message was sent.
+      // The actual "Uncaught (in promise)" error happens if the promise returned by sendMessage rejects.
+      return true;
+    } catch (e) {
+      if (
+        e.message.includes("Could not establish connection") ||
+        e.message.includes("Receiving end does not exist")
+      ) {
+        if (i === retries - 1) {
+          // Last retry
+          console.error(
+            `Failed to send message to tab ${tabId} after ${retries} retries: Action: ${message.action}`,
+            e
+          );
+          // Not re-throwing here to prevent background script from breaking entirely on this,
+          // but logging it as a critical failure. The user will see the sidebar not appearing.
+          return false;
+        }
+        const delay = initialDelay * Math.pow(2, i); // Exponential backoff
+        console.warn(
+          `Retry ${i + 1}/${retries} sending message to tab ${tabId} (action: ${
+            message.action
+          }) after ${delay}ms. Error: ${e.message}`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } else {
+        console.error(
+          `Failed to send message to tab ${tabId} due to an unexpected error: Action: ${message.action}`,
+          e
+        );
+        return false; // Different error
+      }
+    }
+  }
+  return false; // Should be unreachable if logic is correct
+}
+
 // Function to extract username and repository name from GitHub URL
 function getRepoInfo(url) {
   const match = url.match(/github\.com\/([^\/]+)\/([^\/]+)/);
   if (match && match[1] && match[2]) {
-    return { username: match[1], repositoryname: match[2].replace('.git', '') };
+    return { username: match[1], repositoryname: match[2].replace(".git", "") };
   }
   return null;
 }
@@ -24,13 +75,21 @@ chrome.action.onClicked.addListener(async (tab) => {
   }
 
   // Check current state of the sidebar for this tab
-  const currentSidebarState = await chrome.storage.local.get([`sidebarOpen_${tab.id}`]);
+  const currentSidebarState = await chrome.storage.local.get([
+    `sidebarOpen_${tab.id}`,
+  ]);
   const isSidebarOpen = currentSidebarState[`sidebarOpen_${tab.id}`];
 
   if (isSidebarOpen) {
     // Close the sidebar
-    chrome.tabs.sendMessage(tab.id, { action: "toggleSidebar", forceClose: true });
-    chrome.storage.local.set({ [`sidebarOpen_${tab.id}`]: false, [`currentRepo_${tab.id}`]: null });
+    await sendMessageToTabWithRetry(tab.id, {
+      action: "toggleSidebar",
+      forceClose: true,
+    });
+    chrome.storage.local.set({
+      [`sidebarOpen_${tab.id}`]: false,
+      [`currentRepo_${tab.id}`]: null,
+    });
     console.log("Sidebar closed for tab:", tab.id);
   } else {
     // Open the sidebar
@@ -39,68 +98,135 @@ chrome.action.onClicked.addListener(async (tab) => {
 
     // Check if the DeepWiki page exists
     try {
-      const response = await fetch(deepWikiUrl, { method: 'HEAD' });
+      const response = await fetch(deepWikiUrl, { method: "HEAD" });
       let urlToLoad = deepWikiUrl;
       if (response.status === 404) {
-        console.log(`DeepWiki page for ${repoInfo.username}/${repoInfo.repositoryname} not found. Loading DeepWiki homepage.`);
+        console.log(
+          `DeepWiki page for ${repoInfo.username}/${repoInfo.repositoryname} not found. Loading DeepWiki homepage.`
+        );
         urlToLoad = deepWikiHomeUrl;
       }
-      chrome.tabs.sendMessage(tab.id, { action: "toggleSidebar", url: urlToLoad, repoInfo: repoInfo });
-      chrome.storage.local.set({ [`sidebarOpen_${tab.id}`]: true, [`currentRepo_${tab.id}`]: repoInfo });
-      console.log("Sidebar opened for tab:", tab.id, "with URL:", urlToLoad);
+      await sendMessageToTabWithRetry(tab.id, {
+        action: "toggleSidebar",
+        url: urlToLoad,
+        repoInfo: repoInfo,
+      });
+      chrome.storage.local.set({
+        [`sidebarOpen_${tab.id}`]: true,
+        [`currentRepo_${tab.id}`]: repoInfo,
+      });
+      // The console log "Sidebar opened for tab..." is now implicitly covered by sendMessageToTabWithRetry logs or success.
+      // console.log("Sidebar opened for tab:", tab.id, "with URL:", urlToLoad); // Original line 50 area
     } catch (error) {
       console.error("Error checking DeepWiki page:", error);
       // Fallback to DeepWiki homepage in case of network errors etc.
-      chrome.tabs.sendMessage(tab.id, { action: "toggleSidebar", url: deepWikiHomeUrl, repoInfo: repoInfo });
-      chrome.storage.local.set({ [`sidebarOpen_${tab.id}`]: true, [`currentRepo_${tab.id}`]: repoInfo });
-      console.log("Sidebar opened with DeepWiki homepage due to error for tab:", tab.id);
+      await sendMessageToTabWithRetry(tab.id, {
+        action: "toggleSidebar",
+        url: deepWikiHomeUrl,
+        repoInfo: repoInfo,
+      });
+      chrome.storage.local.set({
+        [`sidebarOpen_${tab.id}`]: true,
+        [`currentRepo_${tab.id}`]: repoInfo,
+      });
+      console.log(
+        "Sidebar opened with DeepWiki homepage due to error for tab:",
+        tab.id
+      );
     }
   }
 });
 
 // Listener for tab updates to manage sidebar state
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  if (changeInfo.url) { // If the URL of the tab changes
-    const currentSidebarState = await chrome.storage.local.get([`sidebarOpen_${tabId}`]);
+  // Ensure tab object is valid, especially tab.url
+  if (changeInfo.url && tab && tab.url) {
+    const currentSidebarState = await chrome.storage.local.get([
+      `sidebarOpen_${tabId}`,
+    ]);
     const isSidebarOpen = currentSidebarState[`sidebarOpen_${tabId}`];
 
     if (isSidebarOpen) {
       if (tab.url && tab.url.includes("github.com")) {
         const newRepoInfo = getRepoInfo(tab.url);
-        const storedRepoInfo = await chrome.storage.local.get([`currentRepo_${tabId}`]);
+        const storedRepoInfo = await chrome.storage.local.get([
+          `currentRepo_${tabId}`,
+        ]);
         const currentRepo = storedRepoInfo[`currentRepo_${tabId}`];
 
         // If it's a new repository, update the sidebar content
-        if (newRepoInfo && (!currentRepo || newRepoInfo.username !== currentRepo.username || newRepoInfo.repositoryname !== currentRepo.repositoryname)) {
+        if (
+          newRepoInfo &&
+          (!currentRepo ||
+            newRepoInfo.username !== currentRepo.username ||
+            newRepoInfo.repositoryname !== currentRepo.repositoryname)
+        ) {
           const deepWikiUrl = `https://deepwiki.com/${newRepoInfo.username}/${newRepoInfo.repositoryname}`;
           const deepWikiHomeUrl = "https://deepwiki.com/";
           try {
-            const response = await fetch(deepWikiUrl, { method: 'HEAD' });
+            const response = await fetch(deepWikiUrl, { method: "HEAD" });
             let urlToLoad = deepWikiUrl;
             if (response.status === 404) {
               urlToLoad = deepWikiHomeUrl;
             }
-            chrome.tabs.sendMessage(tabId, { action: "updateSidebarContent", url: urlToLoad, repoInfo: newRepoInfo });
+            await sendMessageToTabWithRetry(tabId, {
+              action: "updateSidebarContent",
+              url: urlToLoad,
+              repoInfo: newRepoInfo,
+            });
             chrome.storage.local.set({ [`currentRepo_${tabId}`]: newRepoInfo });
             console.log("Sidebar content updated for new repo in tab:", tabId);
           } catch (error) {
             console.error("Error checking new DeepWiki page:", error);
-            chrome.tabs.sendMessage(tabId, { action: "updateSidebarContent", url: deepWikiHomeUrl, repoInfo: newRepoInfo });
+            await sendMessageToTabWithRetry(tabId, {
+              action: "updateSidebarContent",
+              url: deepWikiHomeUrl,
+              repoInfo: newRepoInfo,
+            });
             chrome.storage.local.set({ [`currentRepo_${tabId}`]: newRepoInfo });
           }
         } else if (!newRepoInfo && currentRepo) {
-           // Navigated to a non-repo GitHub page (e.g. github.com/settings or root github.com)
-           chrome.tabs.sendMessage(tabId, { action: "toggleSidebar", forceClose: true });
-           chrome.storage.local.set({ [`sidebarOpen_${tabId}`]: false, [`currentRepo_${tabId}`]: null });
-           console.log("Navigated to a non-repo GitHub page. Sidebar closed for tab:", tabId);
+          // Navigated to a non-repo GitHub page (e.g. github.com/settings or root github.com)
+          await sendMessageToTabWithRetry(tabId, {
+            action: "toggleSidebar",
+            forceClose: true,
+          });
+          chrome.storage.local.set({
+            [`sidebarOpen_${tabId}`]: false,
+            [`currentRepo_${tabId}`]: null,
+          });
+          console.log(
+            "Navigated to a non-repo GitHub page. Sidebar closed for tab:",
+            tabId
+          );
         }
       } else {
         // Navigated away from GitHub, close the sidebar
-        chrome.tabs.sendMessage(tabId, { action: "toggleSidebar", forceClose: true });
-        chrome.storage.local.set({ [`sidebarOpen_${tabId}`]: false, [`currentRepo_${tabId}`]: null });
-        console.log("Navigated away from GitHub. Sidebar closed for tab:", tabId);
+        await sendMessageToTabWithRetry(tabId, {
+          action: "toggleSidebar",
+          forceClose: true,
+        });
+        chrome.storage.local.set({
+          [`sidebarOpen_${tabId}`]: false,
+          [`currentRepo_${tabId}`]: null,
+        });
+        console.log(
+          "Navigated away from GitHub. Sidebar closed for tab:",
+          tabId
+        );
       }
     }
+  } else if (
+    changeInfo.status === "loading" &&
+    tab &&
+    tab.url &&
+    !tab.url.startsWith("chrome://")
+  ) {
+    // This case handles when a tab is reloaded or navigated, and it's still loading.
+    // We might want to ensure the content script gets the message if the sidebar was open.
+    // This is complex because the content script might not be there yet.
+    // The existing logic for `updateSidebarContent` on URL change should mostly handle this
+    // once the URL is stable. The retry mechanism is key.
   }
 });
 
@@ -119,22 +245,47 @@ chrome.runtime.onInstalled.addListener(() => {
 
   // The declarativeNetRequest rules are now in rules.json and loaded automatically.
   // No need to set them up dynamically here if they are in rules.json.
-  console.log("Extension installed. DeclarativeNetRequest rules should be loaded from rules.json.");
-  console.log("Action button will be globally enabled; URL check happens on click.");
+  console.log(
+    "Extension installed. DeclarativeNetRequest rules should be loaded from rules.json."
+  );
+  console.log(
+    "Action button will be globally enabled; URL check happens on click."
+  );
 });
 
 // Listen for messages from content script
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   if (message.action === "sidebarClosed" && sender.tab) {
-    chrome.storage.local.set({ [`sidebarOpen_${sender.tab.id}`]: false, [`currentRepo_${sender.tab.id}`]: null });
-    console.log("Sidebar reported closed by content script for tab:", sender.tab.id);
+    chrome.storage.local.set({
+      [`sidebarOpen_${sender.tab.id}`]: false,
+      [`currentRepo_${sender.tab.id}`]: null,
+    });
+    console.log(
+      "Sidebar reported closed by content script for tab:",
+      sender.tab.id
+    );
   } else if (message.action === "closeSidebarViaButton" && sender.tab) {
     // This message comes from sidebar.js (running in the iframe)
     // We need to tell the content script in that tab to close the sidebar.
-    chrome.tabs.sendMessage(sender.tab.id, { action: "toggleSidebar", forceClose: true });
-    // Also update our stored state
-    chrome.storage.local.set({ [`sidebarOpen_${sender.tab.id}`]: false, [`currentRepo_${sender.tab.id}`]: null });
-    console.log("Sidebar close requested from sidebar button for tab:", sender.tab.id);
+    if (sender.tab && sender.tab.id) {
+      await sendMessageToTabWithRetry(sender.tab.id, {
+        action: "toggleSidebar",
+        forceClose: true,
+      });
+      // Also update our stored state
+      chrome.storage.local.set({
+        [`sidebarOpen_${sender.tab.id}`]: false,
+        [`currentRepo_${sender.tab.id}`]: null,
+      });
+      console.log(
+        "Sidebar close requested from sidebar button for tab:",
+        sender.tab.id
+      );
+    } else {
+      console.warn(
+        "Received closeSidebarViaButton without valid sender.tab.id"
+      );
+    }
   }
   // Acknowledge message was received (optional, but good practice if sendResponse might be used)
   // return true; // if you intend to send a response asynchronously. For this message, it's not needed.

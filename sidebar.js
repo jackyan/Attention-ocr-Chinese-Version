@@ -1,10 +1,10 @@
 // sidebar.js
-document.addEventListener('DOMContentLoaded', () => {
-  const closeButton = document.getElementById('deepwiki-sidebar-close-btn');
-  const deepwikiIframe = document.getElementById('deepwiki-iframe');
+document.addEventListener("DOMContentLoaded", () => {
+  const closeButton = document.getElementById("deepwiki-sidebar-close-btn");
+  const deepwikiIframe = document.getElementById("deepwiki-iframe");
 
   if (closeButton) {
-    closeButton.addEventListener('click', () => {
+    closeButton.addEventListener("click", () => {
       // Send a message to the content script to close the sidebar
       // The content script is running in the main page context and can manipulate the sidebar iframe
       // We need to ensure this message is caught by the content script.
@@ -19,7 +19,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (chrome.runtime && chrome.runtime.sendMessage) {
         chrome.runtime.sendMessage({ action: "closeSidebarViaButton" });
       } else {
-        console.error("chrome.runtime.sendMessage not available. Cannot close sidebar.");
+        console.error(
+          "chrome.runtime.sendMessage not available. Cannot close sidebar."
+        );
         // Fallback or alternative method might be needed if this context doesn't have chrome.runtime
         // (e.g. if sidebar.html is loaded in a way that loses extension context, though it shouldn't here)
       }
@@ -29,18 +31,23 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Listen for messages from the content script (its parent window)
-  window.addEventListener('message', (event) => {
+  window.addEventListener("message", (event) => {
     // IMPORTANT: Verify the origin of the message in a real application for security!
     // For this example, we'll accept messages from any origin ('*'), but this is NOT recommended for production.
     // You should check event.origin against the expected origin (e.g., 'https://github.com').
 
     if (event.data && event.data.action) {
-      if (event.data.action === 'loadDeepWikiUrl') {
+      if (event.data.action === "loadDeepWikiUrl") {
         if (deepwikiIframe && event.data.url) {
           deepwikiIframe.src = event.data.url;
-          console.log("Sidebar: Received and set deepwiki-iframe src to:", event.data.url);
+          console.log(
+            "Sidebar: Received and set deepwiki-iframe src to:",
+            event.data.url
+          );
         } else {
-          console.error("Sidebar: Received loadDeepWikiUrl message but deepwiki-iframe not found or no URL provided.");
+          console.error(
+            "Sidebar: Received loadDeepWikiUrl message but deepwiki-iframe not found or no URL provided."
+          );
         }
       }
       // Add other message handlers here if needed (e.g., 'sidebarClosing')
@@ -54,4 +61,13 @@ document.addEventListener('DOMContentLoaded', () => {
   //   console.log('Sidebar iframe resized');
   //   // If DeepWiki content needs specific JS adjustments on resize, they would go here.
   // });
+
+  // Signal to the parent window (content_script.js) that the sidebar is ready
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage(
+      { action: "sidebarReady", from: "deepwikiSidebar" },
+      "*"
+    ); // Consider specifying target origin
+    console.log("Sidebar: Sent 'sidebarReady' message to parent.");
+  }
 });
