@@ -3,15 +3,11 @@
   "name": "DeepWiki GitHub Integration",
   "version": "1.0",
   "description": "Enhances GitHub by integrating DeepWiki.org documentation.",
-  "permissions": [
-    "activeTab",
-    "scripting",
-    "storage",
-    "declarativeNetRequest"
-  ],
+  "permissions": ["activeTab", "scripting", "storage", "declarativeNetRequest"],
   "host_permissions": [
     "https://github.com/*",
-    "https://deepwiki.org/*"
+    "https://deepwiki.org/*",
+    "https://deepwiki.com/*"
   ],
   "action": {
     "default_icon": {
@@ -42,10 +38,15 @@
     "128": "icons/icon128.png"
   },
   "declarative_net_request": {
-    "rule_resources": [{
-      "id": "ruleset_1",
-      "enabled": true,
-      "path": "rules.json"
-    }]
+    "rule_resources": [
+      {
+        "id": "ruleset_1",
+        "enabled": true,
+        "path": "rules.json"
+      }
+    ]
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; script-src-elem 'self'; object-src 'self';"
   }
 }

@@ -34,8 +34,8 @@ chrome.action.onClicked.addListener(async (tab) => {
     console.log("Sidebar closed for tab:", tab.id);
   } else {
     // Open the sidebar
-    const deepWikiUrl = `https://deepwiki.org/${repoInfo.username}/${repoInfo.repositoryname}`;
-    const deepWikiHomeUrl = "https://deepwiki.org/";
+    const deepWikiUrl = `https://deepwiki.com/${repoInfo.username}/${repoInfo.repositoryname}`;
+    const deepWikiHomeUrl = "https://deepwiki.com/";
 
     // Check if the DeepWiki page exists
     try {
@@ -72,8 +72,8 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
         // If it's a new repository, update the sidebar content
         if (newRepoInfo && (!currentRepo || newRepoInfo.username !== currentRepo.username || newRepoInfo.repositoryname !== currentRepo.repositoryname)) {
-          const deepWikiUrl = `https://deepwiki.org/${newRepoInfo.username}/${newRepoInfo.repositoryname}`;
-          const deepWikiHomeUrl = "https://deepwiki.org/";
+          const deepWikiUrl = `https://deepwiki.com/${newRepoInfo.username}/${newRepoInfo.repositoryname}`;
+          const deepWikiHomeUrl = "https://deepwiki.com/";
           try {
             const response = await fetch(deepWikiUrl, { method: 'HEAD' });
             let urlToLoad = deepWikiUrl;

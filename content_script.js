@@ -27,6 +27,17 @@ function getOrCreateSidebarHost() {
   return iframe;
 }
 
+// Function to send the URL to the internal iframe within sidebar.html
+function sendUrlToSidebarIframe(url) {
+  if (sidebarHost && sidebarHost.contentWindow) {
+    // Send message to sidebar.js (running in the iframe)
+    sidebarHost.contentWindow.postMessage({ action: 'loadDeepWikiUrl', url: url }, '*'); // Use '*' for targetOrigin for simplicity, but a specific origin is safer if known.
+    console.log("DeepWiki Sidebar: Sent URL to sidebar.js:", url);
+  } else {
+    console.error("DeepWiki Sidebar: Cannot send URL, sidebarHost or contentWindow not available.");
+  }
+}
+
 // Ensure sidebarHost is initialized on script load if it was previously open (e.g., page reload)
 // This is tricky because content scripts are stateless across navigations unless background script restores state.
 // Background script will send a message if sidebar should be open.
@@ -47,64 +58,31 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Inform background script that sidebar is now closed (if it wasn't initiated by background)
       // This is now mainly handled by the sidebar's own close button via background script.
       // However, if background directly asks to close, no need to send 'sidebarClosed' again.
+      // Also, inform the sidebar.js script that it's being closed.
+      if (sidebarHost && sidebarHost.contentWindow) {
+         sidebarHost.contentWindow.postMessage({ action: 'sidebarClosing' }, '*');
+      }
     } else {
       // Open or update the sidebar
-      const iframeContentWindow = sidebarHost.contentWindow;
-      if (iframeContentWindow) {
-        // It's good practice to ensure the iframe's content (sidebar.html) is loaded before sending a message.
-        // However, for updating the src, we can do it directly.
-        // For more complex interactions, one might wait for an 'iframeReady' message from sidebar.js.
-      }
-
       // Set or update the iframe src if URL is provided
       if (message.url) {
-         // Check if the internal iframe within sidebar.html is ready to have its src changed
-         // This requires sidebar.html's own iframe to be accessible
-        const attemptLoadDeepWiki = () => {
-          const deepwikiIframe = sidebarHost.contentWindow.document.getElementById('deepwiki-iframe');
-          if (deepwikiIframe) {
-            deepwikiIframe.src = message.url;
-            console.log("DeepWiki Sidebar: Setting internal iframe src to:", message.url);
-          } else {
-            // If sidebar.html's content isn't loaded yet, retry
-            console.log("DeepWiki Sidebar: sidebar.html not fully loaded, retrying to set src.");
-            setTimeout(attemptLoadDeepWiki, 100); // Retry after a short delay
-          }
-        };
-        
-        if (sidebarHost.contentWindow && sidebarHost.contentWindow.document.readyState === 'complete') {
-            attemptLoadDeepWiki();
-        } else {
-            sidebarHost.onload = attemptLoadDeepWiki; // Ensure sidebar.html itself is loaded
-        }
+        // Send the URL to the sidebar.js script running inside the iframe
+        sendUrlToSidebarIframe(message.url);
       }
       sidebarHost.style.transform = 'translateX(0%)'; // Slide in
       // document.body.classList.add('deepwiki-sidebar-active'); // If using body class for content pushing
       console.log("DeepWiki Sidebar: Opening/updating sidebar.");
     }
-    sendResponse({ status: "ok" });
+    // sendResponse({ status: "ok" }); // No need to send response if not used asynchronously
   } else if (message.action === "updateSidebarContent") {
     // This action is used when navigating between different GitHub repos with the sidebar already open.
-    if (sidebarHost && sidebarHost.style.transform === 'translateX(0%)') { // Check if sidebar is visible
+    // We should update the content regardless of current animation state, as background script says it's open.
+    if (sidebarHost) {
       if (message.url) {
-        const attemptLoadDeepWiki = () => {
-          const deepwikiIframe = sidebarHost.contentWindow.document.getElementById('deepwiki-iframe');
-          if (deepwikiIframe) {
-            deepwikiIframe.src = message.url;
-            console.log("DeepWiki Sidebar: Updating internal iframe src to:", message.url);
-          } else {
-            console.log("DeepWiki Sidebar: sidebar.html not fully loaded for update, retrying.");
-            setTimeout(attemptLoadDeepWiki, 100);
-          }
-        };
-
-        if (sidebarHost.contentWindow && sidebarHost.contentWindow.document.readyState === 'complete') {
-            attemptLoadDeepWiki();
-        } else {
-            // If sidebar.html is not loaded, wait for its onload event.
-            // This might happen if the content script is injected and immediately gets an update message.
-            sidebarHost.onload = attemptLoadDeepWiki;
-        }
+        // Send the updated URL to the sidebar.js script
+        sendUrlToSidebarIframe(message.url);
+      } else {
+         console.warn("DeepWiki Sidebar: Received updateSidebarContent message without a URL.");
       }
     } else {
       // Sidebar is not currently visible, so just prepare it as if it's a toggle open
@@ -113,10 +91,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Optionally, open it if it's not visible:
       // sidebarHost.style.transform = 'translateX(0%)';
       // ... then set src (similar to toggleSidebar)
+      console.error("DeepWiki Sidebar: Received updateSidebarContent but sidebarHost element does not exist.");
     }
-    sendResponse({ status: "ok" });
+    // sendResponse({ status: "ok" }); // No need to send response if not used asynchronously
   }
-  return true; // Indicates that sendResponse will be called asynchronously for some paths
 });
 
 console.log("DeepWiki GitHub Integration content script loaded.");
