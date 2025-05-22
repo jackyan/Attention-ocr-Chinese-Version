@@ -29,6 +29,7 @@ function getOrCreateSidebarHost() {
   host.style.width = "350px"; // Initial width, will be resizable
   host.style.border = "none";
   host.style.borderLeft = "1px solid #ccc"; // Separator
+  host.style.boxSizing = "border-box"; // For more predictable width calculations
   host.src = chrome.runtime.getURL("sidebar.html");
   // No fixed positioning, it will be a flex item
   return host;
@@ -127,12 +128,24 @@ function createResizer() {
   }
   resizerElement = document.createElement("div");
   resizerElement.id = RESIZER_ID;
-  resizerElement.style.width = "5px";
+  resizerElement.style.width = "3px"; // Make resizer thinner
   resizerElement.style.cursor = "col-resize";
-  resizerElement.style.backgroundColor = "#d1d5db"; // A light gray, adjust as needed
+  resizerElement.style.backgroundColor = "#e0e0e0"; // Slightly more subtle gray
   resizerElement.style.height = "100vh"; // Match panel height
   resizerElement.style.userSelect = "none"; // Prevent text selection during drag
   resizerElement.style.zIndex = "10000"; // Ensure resizer is on top
+  resizerElement.style.transition = "background-color 0.2s ease"; // For hover effect
+
+  // Hover effect for better visibility
+  resizerElement.addEventListener("mouseenter", () => {
+    resizerElement.style.backgroundColor = "#c0c0c0"; // Darken on hover
+  });
+  resizerElement.addEventListener("mouseleave", () => {
+    if (!isResizing) {
+      // Don't change color if currently resizing
+      resizerElement.style.backgroundColor = "#e0e0e0";
+    }
+  });
 
   resizerElement.addEventListener("mousedown", (e) => {
     console.log("Resizer mousedown");
@@ -155,14 +168,24 @@ function createResizer() {
 function handleMouseMove(e) {
   if (!isResizing) return;
   const dx = e.clientX - initialMouseX;
-  let newWidth = initialPanelWidth + dx;
+  // Corrected logic: dragging left (dx < 0) should increase width, so subtract dx.
+  let newWidth = initialPanelWidth - dx;
 
   const maxPanelWidth = (window.innerWidth * MAX_PANEL_WIDTH_PERCENT) / 100;
 
   if (newWidth < MIN_PANEL_WIDTH) newWidth = MIN_PANEL_WIDTH;
   if (newWidth > maxPanelWidth) newWidth = maxPanelWidth;
 
-  // console.log("Resizer mousemove - dx:", dx, "newWidth:", newWidth);
+  console.log(
+    "Resizer mousemove - dx:",
+    dx,
+    "initialPanelWidth:",
+    initialPanelWidth,
+    "calcNewWidth:",
+    newWidth,
+    "finalNewWidth:",
+    newWidth
+  );
   sidebarHost.style.width = `${newWidth}px`;
 }
 
@@ -170,6 +193,12 @@ function handleMouseUp() {
   if (!isResizing) return;
   console.log("Resizer mouseup");
   isResizing = false;
+  // Resetter hover color if mouseup happens over the resizer
+  if (resizerElement.matches(":hover")) {
+    resizerElement.style.backgroundColor = "#c0c0c0";
+  } else {
+    resizerElement.style.backgroundColor = "#e0e0e0";
+  }
   document.removeEventListener("mousemove", handleMouseMove);
   document.removeEventListener("mouseup", handleMouseUp);
   // Save the new width
