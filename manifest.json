@@ -3,7 +3,13 @@
   "name": "DeepWiki GitHub Integration",
   "version": "1.0",
   "description": "Enhances GitHub by integrating DeepWiki.org documentation.",
-  "permissions": ["activeTab", "scripting", "storage", "declarativeNetRequest"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "declarativeNetRequest",
+    "webNavigation"
+  ],
   "host_permissions": [
     "https://github.com/*",
     "https://deepwiki.org/*",

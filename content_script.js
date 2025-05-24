@@ -37,6 +37,11 @@ function getOrCreateSidebarHost() {
 
 // Function to send the URL to the internal iframe within sidebar.html
 function sendUrlToSidebarIframe(url) {
+  console.log(
+    `sendUrlToSidebarIframe called. URL: ${url}, sidebarReady: ${sidebarReady}, sidebarHost: ${!!sidebarHost}, contentWindow: ${!!(
+      sidebarHost && sidebarHost.contentWindow
+    )}`
+  );
   if (sidebarReady && sidebarHost && sidebarHost.contentWindow) {
     sidebarHost.contentWindow.postMessage(
       { action: "loadDeepWikiUrl", url: url },
@@ -45,11 +50,17 @@ function sendUrlToSidebarIframe(url) {
     console.log("DeepWiki Sidebar: Sent URL to sidebar.js:", url);
     queuedUrl = null; // Clear queue if sent
   } else if (sidebarHost && sidebarHost.contentWindow) {
-    console.log("DeepWiki Sidebar: Sidebar not ready, queuing URL:", url);
-    queuedUrl = url; // Queue URL if sidebar not ready
+    // This case means sidebarHost exists and has a contentWindow, but sidebarReady is false.
+    console.log(
+      `DeepWiki Sidebar: Sidebar not ready (sidebarReady=${sidebarReady}), queuing URL:`,
+      url
+    );
+    queuedUrl = url; // Queue URL
   } else {
+    // This case means sidebarHost itself or its contentWindow is not available.
     console.error(
-      "DeepWiki Sidebar: Cannot send or queue URL, sidebarHost or contentWindow not available."
+      "DeepWiki Sidebar: Cannot send or queue URL, sidebarHost or contentWindow not available. Queuing URL:",
+      url
     );
     queuedUrl = url; // Still queue it, hoping sidebarHost becomes available
   }
@@ -110,15 +121,32 @@ function deactivateSideBySideView() {
     sidebarHost.style.display = "none"; // Or remove it: sidebarHost.remove();
   }
   if (resizerElement) {
-    resizerElement.style.display = "none"; // Or remove it: resizerElement.remove();
+    resizerElement.style.display = "none";
   }
-  document.body.style.display = originalBodyDisplay;
+
+  // Restore body styles
+  document.body.style.display = originalBodyDisplay; // Restore original display (e.g., '', 'block', 'grid')
+  document.body.style.overflow = ""; // Explicitly allow body to scroll if it's the scroller
+  document.body.style.height = ""; // Remove any fixed height on body
 
   if (githubMainContentWrapper) {
+    // Restore its original inline styles first.
     githubMainContentWrapper.style.cssText =
       originalGithubMainContentWrapperStyle;
+
+    // Then, be very explicit about removing/resetting properties we manipulated,
+    // ensuring they revert to browser/stylesheet defaults if not in original inline style.
+    githubMainContentWrapper.style.flex = ""; // Remove from flex layout participation
+    githubMainContentWrapper.style.height = "auto"; // Default height behavior
+    githubMainContentWrapper.style.overflow = "visible"; // Default overflow behavior
+
+    // If originalGithubMainContentWrapperStyle actually had values for these, cssText restoration would have done it.
+    // These explicit sets ensure that if original was empty or different, they go to sensible defaults.
   }
   githubMainContentWrapper = null;
+  console.log(
+    "DeepWiki Sidebar: Deactivated side-by-side view, styles reverted."
+  );
 }
 
 function createResizer() {
@@ -186,7 +214,14 @@ function handleMouseMove(e) {
     "finalNewWidth:",
     newWidth
   );
-  sidebarHost.style.width = `${newWidth}px`;
+  requestAnimationFrame(() => {
+    if (sidebarHost && isResizing) {
+      // Ensure still resizing and sidebarHost exists
+      const newWidthPx = `${newWidth}px`;
+      sidebarHost.style.width = newWidthPx;
+      console.log("Resizer RAF: Set sidebarHost.style.width to", newWidthPx);
+    }
+  });
 }
 
 function handleMouseUp() {
@@ -234,58 +269,64 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sidebarReady = false; // Reset ready state when sidebar is closed
       queuedUrl = null; // Clear any queued URL
     } else {
+      // This is the "open" path for toggleSidebar
       activateSideBySideView();
-      // URL will be sent by sendUrlToSidebarIframe if sidebar is ready, or queued.
+      // For the two-stage open, message.url will be undefined here.
+      // The URL will be sent via a subsequent 'updateSidebarContent' message.
       if (message.url) {
+        // This handles if toggleSidebar is ever called with a URL directly
         sendUrlToSidebarIframe(message.url);
       }
-      console.log("DeepWiki Sidebar: Opening/updating sidebar.");
+      console.log("DeepWiki Sidebar: toggleSidebar - opened frame.");
     }
   } else if (message.action === "updateSidebarContent") {
-    // This action is used when navigating between different GitHub repos with the sidebar already open,
-    // or if the page reloaded and background script wants to restore the sidebar.
-
-    const shouldBeVisible = !(
-      sidebarHost && sidebarHost.style.display === "none"
+    console.log(
+      "DeepWiki Sidebar: Received updateSidebarContent. URL:",
+      message.url
     );
+    sidebarHost = getOrCreateSidebarHost(); // Ensure elements exist
+    resizerElement = createResizer();
 
-    if (shouldBeVisible) {
+    // Check if the main layout is already active.
+    // If not (e.g., page reloaded, background sends updateSidebarContent to restore state), activate it.
+    const isLayoutActive =
+      document.body.style.display === "flex" &&
+      sidebarHost.style.display === "block";
+
+    if (!isLayoutActive) {
       console.log(
-        "DeepWiki Sidebar: updateSidebarContent - ensuring layout is active/refreshed."
+        "DeepWiki Sidebar: updateSidebarContent - layout not active, activating now."
       );
-      // Ensure elements exist
-      sidebarHost = getOrCreateSidebarHost();
-      resizerElement = createResizer();
-
-      // Activate or refresh the layout (handles SPA changes)
-      // Store current body display before forcing flex, in case it changed due to GitHub's SPA nav
-      originalBodyDisplay = document.body.style.display;
-      document.body.style.display = "flex";
+      activateSideBySideView(); // This will set up the full view
+    } else {
+      // Layout is already active, just refresh GitHub main content wrapper styles for SPA
+      // and ensure elements are correctly positioned. This avoids a full activateSideBySideView call.
+      console.log(
+        "DeepWiki Sidebar: updateSidebarContent - layout already active, refreshing main content styles."
+      );
+      originalBodyDisplay = document.body.style.display; // Should be 'flex'
+      document.body.style.display = "flex"; // Re-affirm
 
       const currentGithubMainWrapper =
         document.querySelector(GITHUB_MAIN_CONTENT_WRAPPER_SELECTOR) ||
         document.body.children[0];
+
       if (
         currentGithubMainWrapper &&
         currentGithubMainWrapper !== githubMainContentWrapper
       ) {
-        // Main content wrapper might have changed or this is the first time after a reload
         if (
           githubMainContentWrapper &&
-          typeof originalGithubMainContentWrapperStyle === "string"
+          typeof originalGithubMainContentWrapperStyle === "string" &&
+          document.body.contains(githubMainContentWrapper)
         ) {
-          // Try to restore style to the *old* wrapper if it's still in DOM and different
-          if (document.body.contains(githubMainContentWrapper)) {
-            githubMainContentWrapper.style.cssText =
-              originalGithubMainContentWrapperStyle;
-          }
+          githubMainContentWrapper.style.cssText =
+            originalGithubMainContentWrapperStyle;
         }
         githubMainContentWrapper = currentGithubMainWrapper;
-        // Capture the new wrapper's original style before we modify it
         originalGithubMainContentWrapperStyle =
           githubMainContentWrapper.style.cssText;
       } else if (!githubMainContentWrapper && currentGithubMainWrapper) {
-        // First time identifying main wrapper in this session
         githubMainContentWrapper = currentGithubMainWrapper;
         originalGithubMainContentWrapperStyle =
           githubMainContentWrapper.style.cssText;
@@ -299,41 +340,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         githubMainContentWrapper.style.flex = "1 1 auto";
         githubMainContentWrapper.style.overflow = "auto";
         githubMainContentWrapper.style.height = "100vh";
-      } else {
-        console.warn(
-          "DeepWiki Sidebar: updateSidebarContent - main wrapper issue during layout refresh."
-        );
       }
-
-      // Ensure elements are in the body and correctly ordered
+      // Ensure elements are still in body and ordered (GitHub SPA might detach them)
       if (!document.body.contains(resizerElement))
         document.body.appendChild(resizerElement);
       if (!document.body.contains(sidebarHost))
         document.body.appendChild(sidebarHost);
-
-      // Force order: main content (implicitly first if it's a pre-existing child), then resizer, then sidebar
-      // This re-append ensures they are last if GitHub messed with body children.
-      // However, if githubMainContentWrapper is one of the first children, this order should be fine.
-      // A more robust ordering might be needed if GitHub prepends new full-screen overlays.
-      document.body.appendChild(resizerElement); // Ensures it's added, and moves if already child
-      document.body.appendChild(sidebarHost); // Ensures it's added, and moves if already child
+      document.body.appendChild(resizerElement);
+      document.body.appendChild(sidebarHost);
 
       if (resizerElement) resizerElement.style.display = "block";
-      sidebarHost.style.display = "block";
+      sidebarHost.style.display = "block"; // Ensure it's visible
+    }
 
-      if (message.url) {
-        sendUrlToSidebarIframe(message.url);
-      }
-    } else {
-      // Sidebar was explicitly hidden, but update message came (e.g. after reload, background says it should be open)
-      console.log(
-        "DeepWiki Sidebar: Received updateSidebarContent, ensuring sidebar is visible. URL:",
-        message.url
-      );
-      activateSideBySideView(); // Make sure view is active
-      if (message.url) {
-        sendUrlToSidebarIframe(message.url);
-      }
+    if (message.url) {
+      sendUrlToSidebarIframe(message.url);
     }
   }
 });
