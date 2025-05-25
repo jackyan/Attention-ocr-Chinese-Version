@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepWiki Documentation</title>
+    <script type="module" src="./main.ts"></script>
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 加载状态 -->
+        <div id="loading" class="loading-container">
+            <div class="spinner"></div>
+            <p>Loading DeepWiki documentation...</p>
+        </div>
+
+        <!-- 错误状态 -->
+        <div id="error" class="error-container" style="display: none;">
+            <div class="error-icon">📚</div>
+            <h3>Documentation Loading</h3>
+            <p id="error-message">Preparing documentation content...</p>
+            <div class="error-actions">
+                <button id="retry-btn" class="btn btn-primary">Retry</button>
+                <button id="goto-deepwiki" class="btn btn-secondary">Browse DeepWiki</button>
+            </div>
+        </div>
+
+        <!-- 内容区域 -->
+        <div id="content-container" class="content-container" style="display: none;">
+            <iframe id="deepwiki-frame" 
+                    sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-top-navigation"
+                    title="DeepWiki Documentation">
+            </iframe>
+        </div>
+    </div>
+</body>
+</html> 

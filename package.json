@@ -1,0 +1,32 @@
+{
+  "name": "deepwiki-extension",
+  "version": "1.0.0",
+  "description": "A browser extension that integrates DeepWiki.com documentation with GitHub repositories",
+  "type": "module",
+  "scripts": {
+    "build": "wxt build",
+    "build:firefox": "wxt build --browser firefox",
+    "dev": "wxt",
+    "dev:firefox": "wxt --browser firefox",
+    "zip": "wxt zip",
+    "zip:firefox": "wxt zip --browser firefox",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "wxt": "^0.20.6"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.268",
+    "typescript": "^5.3.3"
+  },
+  "keywords": [
+    "browser-extension",
+    "chrome-extension",
+    "firefox-extension",
+    "github",
+    "deepwiki",
+    "documentation"
+  ],
+  "author": "",
+  "license": "MIT"
+} 

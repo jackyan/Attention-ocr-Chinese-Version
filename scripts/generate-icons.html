@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DeepWiki Extension Icon Generator</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f6f8fa;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #24292f;
+            margin-bottom: 20px;
+        }
+        .icon-preview {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        .icon-item {
+            text-align: center;
+            padding: 15px;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            background: #f6f8fa;
+        }
+        .icon-item canvas {
+            display: block;
+            margin: 0 auto 10px;
+            border: 1px solid #d0d7de;
+        }
+        .download-btn {
+            background: #0969da;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .download-btn:hover {
+            background: #0860ca;
+        }
+        .instructions {
+            background: #fff8dc;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+            border-left: 4px solid #ffd700;
+        }
+        .generate-btn {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 20px 0;
+        }
+        .generate-btn:hover {
+            background: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 DeepWiki Extension Icon Generator</h1>
+        
+        <p>此工具可以生成 DeepWiki Extension 所需的不同尺寸图标。点击下面的按钮生成图标，然后下载它们到项目的 <code>public/</code> 目录中。</p>
+        
+        <button class="generate-btn" onclick="generateIcons()">生成图标</button>
+        
+        <div class="instructions">
+            <strong>使用说明：</strong>
+            <ol>
+                <li>点击"生成图标"按钮</li>
+                <li>查看下方预览的图标</li>
+                <li>分别点击每个"下载"按钮保存图标</li>
+                <li>将下载的文件重命名为：icon-16.png, icon-24.png, icon-48.png, icon-128.png</li>
+                <li>将文件放到项目的 public/ 目录中</li>
+            </ol>
+        </div>
+        
+        <div class="icon-preview" id="iconPreview"></div>
+    </div>
+
+    <script>
+        function createIcon(size) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            
+            // 背景圆圈
+            const margin = Math.max(2, Math.floor(size / 20));
+            ctx.fillStyle = '#0969da';
+            ctx.fillRect(0, 0, size, size);
+            
+            // 绘制圆形背景
+            ctx.beginPath();
+            ctx.arc(size/2, size/2, (size/2) - margin, 0, 2 * Math.PI);
+            ctx.fillStyle = '#0969da';
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = Math.max(1, Math.floor(size / 40));
+            ctx.stroke();
+            
+            // 绘制书本
+            const bookMargin = Math.floor(size / 4);
+            const bookWidth = size - 2 * bookMargin;
+            const bookHeight = Math.floor(bookWidth * 3 / 4);
+            const bookX = bookMargin;
+            const bookY = Math.floor((size - bookHeight) / 2);
+            
+            // 书本背景
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(bookX, bookY, bookWidth, bookHeight);
+            
+            // 书本内容区域
+            const contentMargin = Math.max(2, Math.floor(bookWidth / 10));
+            ctx.fillStyle = '#f6f8fa';
+            ctx.fillRect(bookX + contentMargin, bookY + contentMargin, 
+                        bookWidth - 2 * contentMargin, bookHeight - 2 * contentMargin);
+            
+            // 绘制文本线条
+            if (size >= 32) {
+                ctx.strokeStyle = '#656d76';
+                ctx.lineWidth = Math.max(1, Math.floor(size / 64));
+                const lineSpacing = Math.max(2, Math.floor(bookHeight / 6));
+                const lineMargin = Math.max(2, Math.floor(bookWidth / 8));
+                
+                for (let i = 0; i < 3; i++) {
+                    const y = bookY + lineSpacing + i * lineSpacing;
+                    ctx.beginPath();
+                    ctx.moveTo(bookX + lineMargin, y);
+                    ctx.lineTo(bookX + bookWidth - lineMargin, y);
+                    ctx.stroke();
+                }
+            }
+            
+            // 添加 "W" 标识
+            if (size >= 24) {
+                const wSize = Math.max(12, Math.floor(size / 8));
+                const wX = size - wSize - margin - 2;
+                const wY = size - wSize - margin - 2;
+                
+                // 白色圆圈
+                ctx.beginPath();
+                ctx.arc(wX + wSize/2, wY + wSize/2, (wSize/2) + 1, 0, 2 * Math.PI);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+                
+                // "W" 字母
+                ctx.fillStyle = '#0969da';
+                ctx.font = `bold ${Math.max(8, Math.floor(size / 8))}px Arial, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('W', wX + wSize/2, wY + wSize/2);
+            }
+            
+            return canvas;
+        }
+        
+        function generateIcons() {
+            const sizes = [16, 24, 48, 128];
+            const preview = document.getElementById('iconPreview');
+            preview.innerHTML = '';
+            
+            sizes.forEach(size => {
+                const canvas = createIcon(size);
+                
+                const item = document.createElement('div');
+                item.className = 'icon-item';
+                
+                const label = document.createElement('div');
+                label.textContent = `${size}x${size}px`;
+                label.style.fontWeight = 'bold';
+                label.style.marginBottom = '10px';
+                
+                const downloadBtn = document.createElement('button');
+                downloadBtn.className = 'download-btn';
+                downloadBtn.textContent = '下载';
+                downloadBtn.onclick = () => downloadIcon(canvas, size);
+                
+                item.appendChild(label);
+                item.appendChild(canvas);
+                item.appendChild(downloadBtn);
+                
+                preview.appendChild(item);
+            });
+        }
+        
+        function downloadIcon(canvas, size) {
+            const link = document.createElement('a');
+            link.download = `icon-${size}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+        
+        // 页面加载时自动生成图标
+        window.onload = () => {
+            generateIcons();
+        };
+    </script>
+</body>
+</html> 
